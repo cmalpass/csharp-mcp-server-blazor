@@ -62,7 +62,8 @@ else
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/api") && 
                !context.Request.Path.StartsWithSegments("/sse") && 
-               !context.Request.Path.StartsWithSegments("/messages"),
+               !context.Request.Path.StartsWithSegments("/messages") &&
+               !context.Request.Path.StartsWithSegments("/mcp"),
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 
 app.UseHttpsRedirection();
@@ -74,6 +75,10 @@ app.UseRequestTimeouts();
 app.MapStaticAssets();
 
 // --- MCP Standard Protocol Endpoints (for Claude Desktop, Cursor, and Inspector) ---
+
+// The server speaks two transports, as the spec's backwards-compatibility section allows:
+//   * Legacy HTTP+SSE  (MCP 2024-11-05, deprecated by SEP-2596): GET /sse + POST /messages
+//   * Streamable HTTP  (MCP 2025-03-26 / 2025-06-18, current):  POST /mcp
 
 // 1. GET /sse - Standard MCP Server-Sent Events handshake
 app.MapGet("/sse", async (HttpContext context, McpServerRegistry registry, CancellationToken cancellationToken) =>
@@ -118,7 +123,7 @@ app.MapPost("/messages", async (HttpContext context, McpServerRegistry registry,
         return Results.BadRequest(new { error = "Request body cannot be empty." });
     }
 
-    var result = await registry.HandleJsonRpcRequestAsync(body, cancellationToken);
+    var result = await registry.HandleJsonRpcRequestAsync(body, "2024-11-05", cancellationToken);
 
     if (result.ValueKind == JsonValueKind.Undefined)
     {
@@ -126,6 +131,38 @@ app.MapPost("/messages", async (HttpContext context, McpServerRegistry registry,
     }
 
     return Results.Json(result);
+});
+
+// 3. POST /mcp - MCP Streamable HTTP endpoint (current transport per SEP-2596)
+//    Single JSON-RPC message per request; responses are 200 application/json,
+//    or 202 Accepted for notifications and other requests with no response.
+//    This demo is stateless: no Mcp-Session-Id is issued (the server MAY omit it).
+app.MapPost("/mcp", async (HttpContext context, McpServerRegistry registry, CancellationToken cancellationToken) =>
+{
+    using var reader = new StreamReader(context.Request.Body);
+    var body = await reader.ReadToEndAsync(cancellationToken);
+
+    if (string.IsNullOrWhiteSpace(body))
+    {
+        return Results.BadRequest(new { error = "Request body cannot be empty." });
+    }
+
+    var result = await registry.HandleJsonRpcRequestAsync(body, "2025-06-18", cancellationToken);
+
+    if (result.ValueKind == JsonValueKind.Undefined)
+    {
+        return Results.Accepted();
+    }
+
+    return Results.Json(result);
+});
+
+// GET /mcp - This server does not open server-initiated SSE streams, so per the
+// Streamable HTTP spec it answers GET with 405 Method Not Allowed.
+app.MapGet("/mcp", (HttpContext context) =>
+{
+    context.Response.Headers.Allow = "POST";
+    return Results.StatusCode(StatusCodes.Status405MethodNotAllowed);
 });
 
 // --- Blazor Web UI Inspector Endpoints ---

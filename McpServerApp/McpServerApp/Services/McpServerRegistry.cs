@@ -9,6 +9,14 @@ namespace McpServerApp.Services;
 
 public class McpServerRegistry
 {
+    /// <summary>Protocol versions this server can negotiate. See the MCP specification docs/specification/.</summary>
+    public static readonly string[] SupportedProtocolVersions =
+    [
+        "2024-11-05", // legacy SSE transport
+        "2025-03-26", // Streamable HTTP (introduced)
+        "2025-06-18"  // Streamable HTTP (batches removed, MCP-Protocol-Version header)
+    ];
+
     private readonly Dictionary<string, AIFunction> _tools = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentQueue<McpLogEntry> _logs = new();
     private const int MaxLogEntries = 100;
@@ -18,7 +26,7 @@ public class McpServerRegistry
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetSystemMetrics, "get_system_metrics", "Get server system metrics including OS description, processor count, and memory status."));
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.QueryCustomers, "query_customers", "Query the simulated enterprise database for customer records by region or account tier."));
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.CalculateCompoundInterest, "calculate_compound_interest", "Calculate compound growth or loan amortization for financial modeling."));
-        RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetWeatherForecast, "get_weather_forecast", "Fetch real-time weather and forecast data for a specified city."));
+        RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetWeatherForecast, "get_weather_forecast", "Get simulated weather and forecast data for a specified city (deterministic sample data, not live meteorological data)."));
     }
 
     public void RegisterTool(AIFunction function)
@@ -77,7 +85,7 @@ public class McpServerRegistry
         }
     }
 
-    public async Task<JsonElement> HandleJsonRpcRequestAsync(string jsonRpcPayload, CancellationToken cancellationToken = default)
+    public async Task<JsonElement> HandleJsonRpcRequestAsync(string jsonRpcPayload, string fallbackProtocolVersion, CancellationToken cancellationToken = default)
     {
         using var doc = JsonDocument.Parse(jsonRpcPayload);
         var root = doc.RootElement;
@@ -95,7 +103,7 @@ public class McpServerRegistry
                 id = id,
                 result = new
                 {
-                    protocolVersion = "2024-11-05",
+                    protocolVersion = NegotiateProtocolVersion(root, fallbackProtocolVersion),
                     serverInfo = new { name = "CsharpMcpServer", version = "1.0.0" },
                     capabilities = new
                     {
@@ -140,6 +148,26 @@ public class McpServerRegistry
 
         using var responseDoc = JsonDocument.Parse(responseJson);
         return responseDoc.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Implements the MCP initialize version negotiation: respond with the client's
+    /// proposed version when supported, otherwise with the transport's default version.
+    /// </summary>
+    private static string NegotiateProtocolVersion(JsonElement root, string fallbackProtocolVersion)
+    {
+        if (root.TryGetProperty("params", out var paramsElem) &&
+            paramsElem.TryGetProperty("protocolVersion", out var proposed) &&
+            proposed.ValueKind == JsonValueKind.String)
+        {
+            var proposedVersion = proposed.GetString();
+            if (proposedVersion is not null && SupportedProtocolVersions.Contains(proposedVersion))
+            {
+                return proposedVersion;
+            }
+        }
+
+        return fallbackProtocolVersion;
     }
 
     private async Task<object> ExecuteJsonRpcToolCallAsync(JsonElement root, JsonElement id, CancellationToken cancellationToken)

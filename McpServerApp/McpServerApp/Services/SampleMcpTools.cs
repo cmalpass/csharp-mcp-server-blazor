@@ -86,7 +86,7 @@ public class SampleMcpTools
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    [Description("Fetch real-time weather and forecast data for a specified city.")]
+    [Description("Get simulated weather and forecast data for a specified city. Returns deterministic sample data for demonstration purposes, not live meteorological data.")]
     public static string GetWeatherForecast(
         [Description("City name (e.g. 'Seattle', 'London', 'Tokyo')")] string city,
         [Description("Temperature scale: 'celsius' or 'fahrenheit'")] string unit = "celsius")

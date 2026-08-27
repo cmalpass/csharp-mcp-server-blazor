@@ -131,4 +131,125 @@ public class McpServerIntegrationTests : IClassFixture<WebApplicationFactory<Pro
         var text = result.GetProperty("content")[0].GetProperty("text").GetString();
         text.Should().Contain("os");
     }
+
+    [Fact]
+    public async Task PostMcp_Initialize_EchoesSupportedStreamableHttpVersion()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var initPayload = new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            method = "initialize",
+            @params = new
+            {
+                protocolVersion = "2025-06-18",
+                clientInfo = new { name = "IntegrationTestClient", version = "1.0.0" }
+            }
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(initPayload), Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await client.PostAsync("/mcp", content);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString().Should().Be("2025-06-18");
+    }
+
+    [Fact]
+    public async Task PostMcp_Initialize_UnsupportedVersion_FallsBackToTransportDefault()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var initPayload = new
+        {
+            jsonrpc = "2.0",
+            id = 2,
+            method = "initialize",
+            @params = new
+            {
+                protocolVersion = "2020-01-01",
+                clientInfo = new { name = "IntegrationTestClient", version = "1.0.0" }
+            }
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(initPayload), Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await client.PostAsync("/mcp", content);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString().Should().Be("2025-06-18");
+    }
+
+    [Fact]
+    public async Task PostMcp_InitializedNotification_Returns202Accepted()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var notification = new
+        {
+            jsonrpc = "2.0",
+            method = "notifications/initialized"
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(notification), Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await client.PostAsync("/mcp", content);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task PostMcp_ToolsCall_ExecutesTool()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var callPayload = new
+        {
+            jsonrpc = "2.0",
+            id = 3,
+            method = "tools/call",
+            @params = new
+            {
+                name = "get_system_metrics",
+                arguments = new { }
+            }
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(callPayload), Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await client.PostAsync("/mcp", content);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var result = doc.RootElement.GetProperty("result");
+        result.GetProperty("isError").GetBoolean().Should().BeFalse();
+        var text = result.GetProperty("content")[0].GetProperty("text").GetString();
+        text.Should().Contain("os");
+    }
+
+    [Fact]
+    public async Task GetMcp_ReturnsMethodNotAllowed()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/mcp");
+
+        // Assert: server does not open server-initiated SSE streams
+        response.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed);
+    }
 }
