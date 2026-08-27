@@ -232,7 +232,7 @@ public class McpServerRegistry
     public IReadOnlyList<McpLogEntry> GetRecentLogs() => _logs.Reverse().ToList();
 
     // --- Legacy SSE transport session management ---
-    // Each open GET /sse connection registers an SseSession. POST /messages lookups the
+    // Each open GET /sse connection registers an SseSession. POST /messages looks up the
     // session and pushes JSON-RPC response frames onto its channel, which the /sse handler
     // drains as SSE `message` events, per the 2024-11-05 transport spec.
 
