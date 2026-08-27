@@ -1,6 +1,4 @@
 import { expect, test } from "@playwright/test";
-import fs from "node:fs";
-import path from "node:path";
 
 test("a developer can discover, inspect, and execute C# MCP tools in the Blazor inspector", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -16,7 +14,7 @@ test("a developer can discover, inspect, and execute C# MCP tools in the Blazor 
   await toolButton.click();
 
   // Execute the tool
-  const executeButton = page.getByRole("button", { name: "▶ Execute Tool via MCP" });
+  const executeButton = page.getByRole("button", { name: "▶ Execute Tool via Local Inspector API" });
   await expect(executeButton).toBeVisible();
   await executeButton.click();
 
@@ -25,13 +23,8 @@ test("a developer can discover, inspect, and execute C# MCP tools in the Blazor 
   await expect(resultHeader).toBeVisible();
   await expect(page.locator("pre code").first()).toContainText("os");
 
-  // Ensure docs/evidence directory exists
-  const evidenceDir = path.resolve(process.cwd(), "docs/evidence");
-  if (!fs.existsSync(evidenceDir)) {
-    fs.mkdirSync(evidenceDir, { recursive: true });
-  }
-
-  const screenshotPath = path.join(evidenceDir, "mcp-inspector-execution.png");
+  // Keep generated evidence in Playwright's ignored per-test output directory.
+  const screenshotPath = testInfo.outputPath("mcp-inspector-execution.png");
   await page.screenshot({ path: screenshotPath, fullPage: true });
 
   await testInfo.attach("mcp-tool-execution", {

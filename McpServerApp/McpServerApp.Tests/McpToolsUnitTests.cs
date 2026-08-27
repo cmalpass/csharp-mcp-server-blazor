@@ -41,7 +41,7 @@ public class McpToolsUnitTests
     public void CalculateCompoundInterest_ValidParameters_ComputesCorrectYield()
     {
         // Act
-        var json = SampleMcpTools.CalculateCompoundInterest(principal: 10000, annualRatePercent: 5.0, years: 2, compoundFrequency: 1);
+        var json = SampleMcpTools.CalculateCompoundInterest(principal: 10000m, annualRatePercent: 5.0m, years: 2, compoundFrequency: 1);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
