@@ -81,6 +81,8 @@ app.MapStaticAssets();
 //   * Streamable HTTP  (MCP 2025-03-26 / 2025-06-18, current):  POST /mcp
 
 // 1. GET /sse - Standard MCP Server-Sent Events handshake
+//    Sends the `endpoint` event, then streams every JSON-RPC response pushed by
+//    POST /messages as SSE `message` events, per the 2024-11-05 transport spec.
 app.MapGet("/sse", async (HttpContext context, McpServerRegistry registry, CancellationToken cancellationToken) =>
 {
     context.Response.Headers.ContentType = "text/event-stream";
@@ -88,6 +90,7 @@ app.MapGet("/sse", async (HttpContext context, McpServerRegistry registry, Cance
     context.Response.Headers.Connection = "keep-alive";
 
     var sessionId = Guid.NewGuid().ToString("n");
+    var session = registry.CreateSseSession(sessionId);
     var messageUri = $"/messages?sessionId={sessionId}";
 
     registry.LogEvent("outbound", "sse/connect", $"Client connected. SessionId: {sessionId}");
@@ -96,25 +99,58 @@ app.MapGet("/sse", async (HttpContext context, McpServerRegistry registry, Cance
     await context.Response.WriteAsync($"event: endpoint\ndata: {messageUri}\n\n", cancellationToken);
     await context.Response.Body.FlushAsync(cancellationToken);
 
-    // Keep SSE connection alive until client disconnects
+    // Deliver response frames from POST /messages; ping every 15s to keep the
+    // connection alive. Keep a single pending tick: PeriodicTimer throws if
+    // WaitForNextTickAsync is called while a previous tick is still pending,
+    // so the tick is re-armed only after it fires.
+    using var pingTimer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+    var pingTask = pingTimer.WaitForNextTickAsync(cancellationToken).AsTask();
     try
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(15000, cancellationToken);
-            await context.Response.WriteAsync(": ping\n\n", cancellationToken);
-            await context.Response.Body.FlushAsync(cancellationToken);
+            var readTask = session.Frames.Reader.WaitToReadAsync(cancellationToken).AsTask();
+            var completed = await Task.WhenAny(readTask, pingTask);
+
+            if (completed == pingTask)
+            {
+                await context.Response.WriteAsync(": ping\n\n", cancellationToken);
+                await context.Response.Body.FlushAsync(cancellationToken);
+                pingTask = pingTimer.WaitForNextTickAsync(cancellationToken).AsTask();
+            }
+
+            if (session.Frames.Reader.TryRead(out var frame))
+            {
+                await context.Response.WriteAsync(frame, cancellationToken);
+                await context.Response.Body.FlushAsync(cancellationToken);
+            }
         }
     }
     catch (OperationCanceledException)
     {
         registry.LogEvent("inbound", "sse/disconnect", $"Client disconnected. SessionId: {sessionId}");
     }
+    finally
+    {
+        registry.RemoveSseSession(sessionId);
+    }
 });
 
 // 2. POST /messages - Standard MCP JSON-RPC message endpoint
+//    The SSE transport spec forbids answering in the POST response: the server
+//    acknowledges with 202 Accepted and delivers JSON-RPC responses as SSE
+//    `message` events on the client's open /sse stream. Unknown sessions get 404.
 app.MapPost("/messages", async (HttpContext context, McpServerRegistry registry, CancellationToken cancellationToken) =>
 {
+    var sessionId = context.Request.Query.TryGetValue("sessionId", out var sessionIdValues) && sessionIdValues.Count > 0
+        ? sessionIdValues[0]
+        : null;
+
+    if (string.IsNullOrEmpty(sessionId) || registry.FindSseSession(sessionId) is not { } session)
+    {
+        return Results.NotFound();
+    }
+
     using var reader = new StreamReader(context.Request.Body);
     var body = await reader.ReadToEndAsync(cancellationToken);
 
@@ -125,12 +161,15 @@ app.MapPost("/messages", async (HttpContext context, McpServerRegistry registry,
 
     var result = await registry.HandleJsonRpcRequestAsync(body, "2024-11-05", cancellationToken);
 
-    if (result.ValueKind == JsonValueKind.Undefined)
+    // Notifications (e.g. notifications/initialized) have no JSON-RPC response;
+    // only actual responses are pushed to the client's stream.
+    if (result.ValueKind != JsonValueKind.Undefined)
     {
-        return Results.Accepted();
+        var frame = $"event: message\ndata: {result}\n\n";
+        session.Frames.Writer.TryWrite(frame);
     }
 
-    return Results.Json(result);
+    return Results.Accepted();
 });
 
 // 3. POST /mcp - MCP Streamable HTTP endpoint (current transport per SEP-2596)

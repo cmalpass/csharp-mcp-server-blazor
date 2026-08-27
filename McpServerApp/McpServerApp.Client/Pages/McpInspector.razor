@@ -184,7 +184,7 @@
     }
   }
 }</code></pre>
-                <p class="small text-muted">For a publicly hosted (HTTPS) server, use Claude's Settings &rarr; Connectors &rarr; <strong>Add custom connector</strong> instead. Requires Node.js 22+.</p>
+                <p class="small text-muted">For a publicly hosted (HTTPS) server, use Claude's Customize &rarr; Connectors &rarr; <strong>Add custom connector</strong> instead. Requires Node.js 22+.</p>
 
                 <h6 class="mt-4">2. Cursor</h6>
                 <p class="small text-muted">Add a remote MCP server in <strong>Settings &rarr; MCP</strong>, or in <code>.cursor/mcp.json</code> (project) / <code>~/.cursor/mcp.json</code> (user):</p>
@@ -201,7 +201,7 @@
                 <p class="small text-muted">Run the Inspector's web UI, then connect using the transport selector:</p>
                 <pre class="bg-dark text-light p-3 rounded"><code>npx @@modelcontextprotocol/inspector</code></pre>
                 <ul>
-                    <li>Open <code>http://localhost:6274</code> in your browser</li>
+                    <li>It prints a URL on <code>localhost:6274</code> (with a session token) — open it in your browser</li>
                     <li>Choose <strong>Streamable HTTP</strong> and paste <code>http://localhost:5000/mcp</code> (or <strong>SSE</strong> with <code>http://localhost:5000/sse</code>)</li>
                 </ul>
             </div>

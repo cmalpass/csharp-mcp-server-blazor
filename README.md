@@ -62,7 +62,7 @@ Claude Desktop's `claude_desktop_config.json` only supports **stdio** servers �
   }
 }
 ```
-For a publicly hosted (HTTPS) server, use **Settings → Connectors → Add custom connector** in Claude instead of the config file.
+For a publicly hosted (HTTPS) server, use **Customize → Connectors → Add custom connector** in Claude instead of the config file.
 
 ### 2. Cursor
 Add a remote MCP server in **Settings → MCP**, or in `.cursor/mcp.json` (project) / `~/.cursor/mcp.json` (user):
@@ -82,7 +82,7 @@ Run the Inspector's web UI and connect using the transport selector:
 ```bash
 npx @modelcontextprotocol/inspector
 ```
-Then open `http://localhost:6274`, choose **Streamable HTTP** (paste `http://localhost:5000/mcp`) or **SSE** (paste `http://localhost:5000/sse`), and connect. The UI can also export ready-to-paste `mcp.json` snippets.
+It prints a URL on `localhost:6274` (with a session token) — open it in your browser, then choose **Streamable HTTP** (paste `http://localhost:5000/mcp`) or **SSE** (paste `http://localhost:5000/sse`), and connect. The UI can also export ready-to-paste `mcp.json` snippets.
 
 ---
 

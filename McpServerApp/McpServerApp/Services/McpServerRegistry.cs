@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using McpServerApp.Contracts;
 using Microsoft.Extensions.AI;
 
@@ -19,6 +20,7 @@ public class McpServerRegistry
 
     private readonly Dictionary<string, AIFunction> _tools = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentQueue<McpLogEntry> _logs = new();
+    private readonly ConcurrentDictionary<string, SseSession> _sseSessions = new();
     private const int MaxLogEntries = 100;
 
     public McpServerRegistry()
@@ -228,4 +230,44 @@ public class McpServerRegistry
     }
 
     public IReadOnlyList<McpLogEntry> GetRecentLogs() => _logs.Reverse().ToList();
+
+    // --- Legacy SSE transport session management ---
+    // Each open GET /sse connection registers an SseSession. POST /messages lookups the
+    // session and pushes JSON-RPC response frames onto its channel, which the /sse handler
+    // drains as SSE `message` events, per the 2024-11-05 transport spec.
+
+    public SseSession CreateSseSession(string id)
+    {
+        var session = new SseSession(id);
+        _sseSessions[id] = session;
+        return session;
+    }
+
+    public SseSession? FindSseSession(string id) =>
+        _sseSessions.TryGetValue(id, out var session) ? session : null;
+
+    public void RemoveSseSession(string id)
+    {
+        if (_sseSessions.TryRemove(id, out var session))
+        {
+            session.Frames.Writer.TryComplete();
+        }
+    }
+}
+
+/// <summary>
+/// A single connected SSE client: the channel through which JSON-RPC response frames
+/// (already formatted as SSE `message` events) are delivered to its /sse stream.
+/// </summary>
+public sealed class SseSession
+{
+    public SseSession(string id)
+    {
+        Id = id;
+        Frames = Channel.CreateUnbounded<string>();
+    }
+
+    public string Id { get; }
+
+    public Channel<string> Frames { get; }
 }
