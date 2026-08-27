@@ -1,0 +1,331 @@
+@page "/mcp-inspector"
+@page "/"
+@inject HttpClient Http
+@using System.Text.Json
+@using McpServerApp.Contracts
+@rendermode InteractiveWebAssembly
+
+<PageTitle>C# MCP Server & Blazor Inspector</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 mb-0">C# MCP Server & Blazor Inspector</h1>
+            <p class="text-muted small mb-0">Model Context Protocol endpoint hosted in ASP.NET Core & inspected in WebAssembly</p>
+        </div>
+        <div class="d-flex gap-2">
+            <span class="badge bg-success d-flex align-items-center">MCP SSE: /sse</span>
+            <span class="badge bg-primary d-flex align-items-center">JSON-RPC: /messages</span>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshData" disabled="@IsLoading">
+                Refresh Tools
+            </button>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link @(ActiveTab == "tools" ? "active" : "")" @onclick="@(() => ActiveTab = "tools")">
+                🛠️ Discovered Tools (@Tools.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(ActiveTab == "logs" ? "active" : "")" @onclick="@(() => ActiveTab = "logs")">
+                📊 Protocol Traffic Logs (@Logs.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(ActiveTab == "config" ? "active" : "")" @onclick="@(() => ActiveTab = "config")">
+                ⚙️ AI Client Setup Guide
+            </button>
+        </li>
+    </ul>
+
+    @if (ActiveTab == "tools")
+    {
+        <div class="row">
+            <!-- Left Pane: Tool Selector -->
+            <div class="col-md-4">
+                <div class="list-group mb-3">
+                    @if (Tools.Count == 0 && !IsLoading)
+                    {
+                        <div class="alert alert-warning">No MCP tools discovered.</div>
+                    }
+                    @foreach (var tool in Tools)
+                    {
+                        <button type="button" 
+                                class="list-group-item list-group-item-action @(SelectedTool?.Name == tool.Name ? "active" : "")"
+                                @onclick="() => SelectTool(tool)">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1 fw-bold">@tool.Name</h6>
+                            </div>
+                            <p class="mb-1 small text-truncate">@tool.Description</p>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- Right Pane: Schema Viewer & Form Execution -->
+            <div class="col-md-8">
+                @if (SelectedTool != null)
+                {
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Tool: <code>@SelectedTool.Name</code></h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">@SelectedTool.Description</p>
+
+                            <h6 class="fw-bold mt-3">Execution Arguments (JSON)</h6>
+                            <div class="mb-3">
+                                <textarea @bind="ArgumentsJson" class="form-control font-monospace" rows="4" placeholder="{ }"></textarea>
+                                <small class="text-muted">Edit the JSON payload to pass arguments to the C# tool method.</small>
+                            </div>
+
+                            <button class="btn btn-primary" @onclick="ExecuteTool" disabled="@IsExecuting">
+                                @if (IsExecuting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    <span>Executing C# Method...</span>
+                                }
+                                else
+                                {
+                                    <span>▶ Execute Tool via MCP</span>
+                                }
+                            </button>
+
+                            @if (ExecutionResponse != null)
+                            {
+                                <div class="mt-4">
+                                    <h6 class="fw-bold d-flex justify-content-between align-items-center">
+                                        <span>Execution Result</span>
+                                        <span class="badge @(ExecutionResponse.IsError ? "bg-danger" : "bg-success")">
+                                            @(ExecutionResponse.IsError ? "Error" : "Success")
+                                        </span>
+                                    </h6>
+                                    <pre class="bg-dark text-light p-3 rounded" style="max-height: 300px; overflow-y: auto;"><code>@ExecutionResponse.GetTextContent()</code></pre>
+                                </div>
+                            }
+
+                            <div class="mt-4">
+                                <h6 class="fw-bold">Generated JSON Schema</h6>
+                                <pre class="bg-light p-3 border rounded text-muted small" style="max-height: 200px; overflow-y: auto;"><code>@GetPrettyJson(SelectedTool.InputSchema)</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info">Select an MCP tool from the list to inspect its schema and test execution.</div>
+                }
+            </div>
+        </div>
+    }
+    else if (ActiveTab == "logs")
+    {
+        <div class="card shadow-sm">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Recent JSON-RPC Wire Messages</h5>
+                <button class="btn btn-sm btn-outline-primary" @onclick="RefreshLogs">Refresh Logs</button>
+            </div>
+            <div class="card-body p-0">
+                @if (Logs.Count == 0)
+                {
+                    <div class="p-3 text-muted">No JSON-RPC traffic recorded yet. Connect an external AI client or execute a tool in the inspector.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0 font-monospace" style="font-size: 0.85rem;">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 120px;">Time</th>
+                                    <th style="width: 100px;">Direction</th>
+                                    <th style="width: 140px;">Method</th>
+                                    <th>Payload Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var log in Logs)
+                                {
+                                    <tr>
+                                        <td>@log.Timestamp.ToString("HH:mm:ss.fff")</td>
+                                        <td>
+                                            <span class="badge @(log.Direction == "inbound" ? "bg-info text-dark" : "bg-secondary")">
+                                                @log.Direction
+                                            </span>
+                                        </td>
+                                        <td><strong>@log.Method</strong></td>
+                                        <td class="text-truncate" style="max-width: 500px;" title="@log.Payload">
+                                            @log.Payload
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else if (ActiveTab == "config")
+    {
+        <div class="card shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Connecting External AI Clients to this C# MCP Server</h5>
+            </div>
+            <div class="card-body">
+                <h6>1. Claude Desktop Configuration</h6>
+                <p class="small text-muted">Add this to your <code>claude_desktop_config.json</code>:</p>
+                <pre class="bg-dark text-light p-3 rounded"><code>{
+  "mcpServers": {
+    "csharp-blazor-server": {
+      "url": "http://localhost:5000/sse"
+    }
+  }
+}</code></pre>
+
+                <h6 class="mt-4">2. Cursor Configuration</h6>
+                <p class="small text-muted">Navigate to <strong>Cursor Settings &gt; Features &gt; MCP</strong> and add a new SSE server:</p>
+                <ul>
+                    <li><strong>Name:</strong> <code>csharp-tools</code></li>
+                    <li><strong>Type:</strong> <code>SSE</code></li>
+                    <li><strong>URL:</strong> <code>http://localhost:5000/sse</code></li>
+                </ul>
+
+                <h6 class="mt-4">3. Official Anthropic MCP Inspector CLI</h6>
+                <p class="small text-muted">Inspect and test the server via the command line:</p>
+                <pre class="bg-dark text-light p-3 rounded"><code>npx @@modelcontextprotocol/inspector http://localhost:5000/sse</code></pre>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string ActiveTab = "tools";
+    private bool IsLoading = true;
+    private bool IsExecuting = false;
+    private List<McpToolInfo> Tools = new();
+    private List<McpLogEntry> Logs = new();
+    private McpToolInfo? SelectedTool;
+    private string ArgumentsJson = "{}";
+    private McpCallResponse? ExecutionResponse;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        IsLoading = true;
+        try
+        {
+            Tools = await Http.GetFromJsonAsync<List<McpToolInfo>>("/api/mcp/tools") ?? new();
+            if (Tools.Count > 0 && SelectedTool == null)
+            {
+                SelectTool(Tools[0]);
+            }
+            await RefreshLogs();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching tools: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task RefreshLogs()
+    {
+        try
+        {
+            Logs = await Http.GetFromJsonAsync<List<McpLogEntry>>("/api/mcp/logs") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching logs: {ex.Message}");
+        }
+    }
+
+    private void SelectTool(McpToolInfo tool)
+    {
+        SelectedTool = tool;
+        ExecutionResponse = null;
+
+        // Populate sample default arguments based on tool name
+        ArgumentsJson = tool.Name switch
+        {
+            "query_customers" => JsonSerializer.Serialize(new { region = "NorthAmerica", tier = "Enterprise", limit = 3 }, new JsonSerializerOptions { WriteIndented = true }),
+            "calculate_compound_interest" => JsonSerializer.Serialize(new { principal = 10000.0, annualRatePercent = 7.5, years = 5, compoundFrequency = 12 }, new JsonSerializerOptions { WriteIndented = true }),
+            "get_weather_forecast" => JsonSerializer.Serialize(new { city = "Seattle", unit = "celsius" }, new JsonSerializerOptions { WriteIndented = true }),
+            _ => "{}"
+        };
+    }
+
+    private async Task ExecuteTool()
+    {
+        if (SelectedTool == null) return;
+
+        IsExecuting = true;
+        ExecutionResponse = null;
+
+        try
+        {
+            var argsDict = new Dictionary<string, object?>();
+            if (!string.IsNullOrWhiteSpace(ArgumentsJson) && ArgumentsJson.Trim() != "{}")
+            {
+                using var doc = JsonDocument.Parse(ArgumentsJson);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    argsDict[prop.Name] = prop.Value.ValueKind switch
+                    {
+                        JsonValueKind.String => prop.Value.GetString(),
+                        JsonValueKind.Number => prop.Value.TryGetInt32(out var i) ? (object)i : prop.Value.GetDouble(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.Null => null,
+                        _ => prop.Value.GetRawText()
+                    };
+                }
+            }
+
+            var payload = new McpCallRequest
+            {
+                Name = SelectedTool.Name,
+                Arguments = argsDict
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/mcp/call", payload);
+            response.EnsureSuccessStatusCode();
+
+            ExecutionResponse = await response.Content.ReadFromJsonAsync<McpCallResponse>();
+            await RefreshLogs();
+        }
+        catch (Exception ex)
+        {
+            ExecutionResponse = new McpCallResponse
+            {
+                IsError = true,
+                Content = new List<McpContentItem> { new() { Text = $"Client error: {ex.Message}" } }
+            };
+        }
+        finally
+        {
+            IsExecuting = false;
+        }
+    }
+
+    private string GetPrettyJson(JsonElement element)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return element.ToString();
+        }
+    }
+}
