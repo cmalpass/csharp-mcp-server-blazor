@@ -1,6 +1,6 @@
 # C# MCP Server & Blazor WebAssembly Inspector
 
-A companion repository for the blog post: **[Building a C# MCP Server with a Blazor WebAssembly Inspector](https://chrismalpass.com/posts/building-a-csharp-mcp-server-with-blazor-frontend/)**.
+A companion repository for the blog post: **[Building a C# MCP Server with a Blazor WebAssembly Inspector](https://chrismalpass.net/posts/building-a-csharp-mcp-server-with-blazor-frontend/)**.
 
 This is a local, pedagogical MCP server built on .NET 10. It uses the official MCP C# SDK **v2.2.0** and its stateless Streamable HTTP transport at `POST /mcp`, alongside a Blazor WebAssembly page for inspecting the sample tools. Customer and weather responses are simulated fixtures; the system-metrics tool intentionally reports live data from the local process. No tool queries an external system.
 
