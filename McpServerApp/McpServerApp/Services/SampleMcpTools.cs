@@ -126,8 +126,9 @@ public class SampleMcpTools
             throw new McpException("city must be a non-empty string.");
         }
 
-        if (!unit.Equals("celsius", StringComparison.OrdinalIgnoreCase) &&
-            !unit.Equals("fahrenheit", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(unit) ||
+            (!unit.Equals("celsius", StringComparison.OrdinalIgnoreCase) &&
+             !unit.Equals("fahrenheit", StringComparison.OrdinalIgnoreCase)))
         {
             throw new McpException("unit must be either 'celsius' or 'fahrenheit'.");
         }

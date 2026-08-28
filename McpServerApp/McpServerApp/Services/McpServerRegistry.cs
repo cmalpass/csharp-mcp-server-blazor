@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using McpServerApp.Contracts;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace McpServerApp.Services;
 
@@ -10,11 +11,13 @@ public class McpServerRegistry
     private readonly Dictionary<string, AIFunction> _tools = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentQueue<McpLogEntry> _logs = new();
     private readonly bool _capturePayloads;
+    private readonly ILogger<McpServerRegistry>? _logger;
     private const int MaxLogEntries = 100;
 
-    public McpServerRegistry(IWebHostEnvironment? environment = null)
+    public McpServerRegistry(IWebHostEnvironment? environment = null, ILogger<McpServerRegistry>? logger = null)
     {
         _capturePayloads = environment?.IsDevelopment() == true;
+        _logger = logger;
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetSystemMetrics, "get_system_metrics", "Get server process metrics: OS and framework description, processor count, process working-set bytes, uptime, and UTC time."));
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.QueryCustomers, "query_customers", "Query fixed, simulated customer fixture records by region or account tier. totalFound is the number of records matching the filters before the returned page is limited."));
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.CalculateCompoundInterest, "calculate_compound_interest", "Calculate compound investment growth using decimal arithmetic for a teaching example; this is not financial advice."));
@@ -68,8 +71,13 @@ public class McpServerRegistry
                 Content = new List<McpContentItem> { new() { Text = text } }
             };
         }
-        catch (Exception)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger?.LogWarning(exception, "Diagnostic tool {ToolName} failed.", name);
             return new McpCallResponse
             {
                 IsError = true,
