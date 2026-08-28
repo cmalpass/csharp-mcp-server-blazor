@@ -15,8 +15,8 @@ public class McpServerRegistry
     public McpServerRegistry(IWebHostEnvironment? environment = null)
     {
         _capturePayloads = environment?.IsDevelopment() == true;
-        RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetSystemMetrics, "get_system_metrics", "Get server system metrics including OS description, processor count, and memory status."));
-        RegisterTool(AIFunctionFactory.Create(SampleMcpTools.QueryCustomers, "query_customers", "Query the simulated enterprise database for customer records by region or account tier."));
+        RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetSystemMetrics, "get_system_metrics", "Get server process metrics: OS and framework description, processor count, process working-set bytes, uptime, and UTC time."));
+        RegisterTool(AIFunctionFactory.Create(SampleMcpTools.QueryCustomers, "query_customers", "Query fixed, simulated customer fixture records by region or account tier. totalFound is the number of records matching the filters before the returned page is limited."));
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.CalculateCompoundInterest, "calculate_compound_interest", "Calculate compound investment growth using decimal arithmetic for a teaching example; this is not financial advice."));
         RegisterTool(AIFunctionFactory.Create(SampleMcpTools.GetWeatherForecast, "get_weather_forecast", "Get simulated weather and forecast data for a specified city (deterministic sample data, not live meteorological data)."));
     }
@@ -60,7 +60,7 @@ public class McpServerRegistry
             var args = arguments != null ? new AIFunctionArguments(arguments) : new AIFunctionArguments();
             LogEvent("inbound", $"diagnostic/tools/call:{name}", JsonSerializer.Serialize(arguments ?? new Dictionary<string, object?>()));
             var invokeResult = await tool.InvokeAsync(args, cancellationToken);
-            
+
             var text = invokeResult?.ToString() ?? "null";
             return new McpCallResponse
             {

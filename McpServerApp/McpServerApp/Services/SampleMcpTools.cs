@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 namespace McpServerApp.Services;
@@ -7,7 +8,7 @@ namespace McpServerApp.Services;
 [McpServerToolType]
 public class SampleMcpTools
 {
-    [Description("Get server system metrics including OS description, processor count, and memory status.")]
+    [Description("Get server process metrics: OS and framework description, processor count, process working-set bytes, uptime, and UTC time.")]
     [McpServerTool(Name = "get_system_metrics", ReadOnly = true, Idempotent = true)]
     public static string GetSystemMetrics()
     {
@@ -24,12 +25,12 @@ public class SampleMcpTools
         return JsonSerializer.Serialize(metrics, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    [Description("Query the simulated enterprise database for customer records by region or account tier.")]
+    [Description("Query fixed, simulated customer fixture records by region or account tier. totalFound is the number of records matching the filters before the returned page is limited.")]
     [McpServerTool(Name = "query_customers", ReadOnly = true, Idempotent = true)]
     public static string QueryCustomers(
         [Description("Filter by customer region, e.g. 'NorthAmerica', 'Europe', 'Asia'")] string? region = null,
-        [Description("Minimum account tier, e.g. 'Standard', 'Premium', 'Enterprise'")] string? tier = null,
-        [Description("Maximum records to return (1-50)")] int limit = 5)
+        [Description("Exact account tier filter: 'Standard', 'Premium', or 'Enterprise'.")] string? tier = null,
+        [Description("Maximum records to return. Values are clamped to the inclusive range 1-50.")] int limit = 5)
     {
         var sampleData = new[]
         {
@@ -52,11 +53,12 @@ public class SampleMcpTools
             query = query.Where(c => c.tier.Equals(tier, StringComparison.OrdinalIgnoreCase));
         }
 
-        var results = query.Take(Math.Clamp(limit, 1, 50)).ToList();
+        var matchingCustomers = query.ToList();
+        var results = matchingCustomers.Take(Math.Clamp(limit, 1, 50)).ToList();
 
         return JsonSerializer.Serialize(new
         {
-            totalFound = results.Count,
+            totalFound = matchingCustomers.Count,
             customers = results
         }, new JsonSerializerOptions { WriteIndented = true });
     }
@@ -64,14 +66,19 @@ public class SampleMcpTools
     [Description("Calculate compound investment growth using decimal arithmetic for a teaching example; this is not financial advice.")]
     [McpServerTool(Name = "calculate_compound_interest", ReadOnly = true, Idempotent = true)]
     public static string CalculateCompoundInterest(
-        [Description("Initial principal amount in USD")] decimal principal,
-        [Description("Annual interest rate percentage (e.g. 5.5 for 5.5%)")] decimal annualRatePercent,
-        [Description("Investment duration in years")] int years,
-        [Description("Compounding periods per year (1 for annual, 12 for monthly, 365 for daily)")] int compoundFrequency = 12)
+        [Description("Initial principal amount in USD. Must be greater than zero.")] decimal principal,
+        [Description("Annual interest rate percentage (e.g. 5.5 for 5.5%). Must be greater than zero.")] decimal annualRatePercent,
+        [Description("Investment duration in whole years. Must be between 1 and 100.")] int years,
+        [Description("Compounding periods per year. Must be between 1 and 365; the total number of periods must not exceed 36,500.")] int compoundFrequency = 12)
     {
         if (principal <= 0 || annualRatePercent <= 0 || years <= 0 || compoundFrequency <= 0)
         {
-            return JsonSerializer.Serialize(new { error = "All numerical inputs must be positive non-zero numbers." });
+            throw new McpException("principal, annualRatePercent, years, and compoundFrequency must all be greater than zero.");
+        }
+
+        if (years > 100 || compoundFrequency > 365 || (long)years * compoundFrequency > 36_500)
+        {
+            throw new McpException("years must be at most 100, compoundFrequency at most 365, and total compounding periods at most 36,500.");
         }
 
         var rate = annualRatePercent / 100m;
@@ -108,12 +115,23 @@ public class SampleMcpTools
         return result - 1m;
     }
 
-    [Description("Get simulated weather and forecast data for a specified city. Returns deterministic sample data for demonstration purposes, not live meteorological data.")]
+    [Description("Get deterministic, simulated weather fixture data for a specified city. This is not live meteorological data.")]
     [McpServerTool(Name = "get_weather_forecast", ReadOnly = true, Idempotent = true)]
     public static string GetWeatherForecast(
-        [Description("City name (e.g. 'Seattle', 'London', 'Tokyo')")] string city,
-        [Description("Temperature scale: 'celsius' or 'fahrenheit'")] string unit = "celsius")
+        [Description("Non-empty city name (e.g. 'Seattle', 'London', 'Tokyo').")] string city,
+        [Description("Temperature scale. Must be exactly 'celsius' or 'fahrenheit' (case-insensitive).")] string unit = "celsius")
     {
+        if (string.IsNullOrWhiteSpace(city))
+        {
+            throw new McpException("city must be a non-empty string.");
+        }
+
+        if (!unit.Equals("celsius", StringComparison.OrdinalIgnoreCase) &&
+            !unit.Equals("fahrenheit", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new McpException("unit must be either 'celsius' or 'fahrenheit'.");
+        }
+
         var isFahrenheit = unit.Equals("fahrenheit", StringComparison.OrdinalIgnoreCase);
         var baseTempC = (StableCityHash(city) % 30) + 5;
         var temp = isFahrenheit ? (baseTempC * 9 / 5) + 32 : baseTempC;

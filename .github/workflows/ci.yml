@@ -16,7 +16,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -30,7 +30,7 @@ jobs:
       run: dotnet build McpServerApp/McpServerApp.sln --no-restore --configuration Release
 
     - name: Run .NET Test Suite
-      run: dotnet test McpServerApp/McpServerApp.sln --no-build --configuration Release --verbosity normal
+      run: dotnet test --solution McpServerApp/McpServerApp.sln --no-build --configuration Release --verbosity normal
 
     - name: Install Playwright & Chromium
       run: |

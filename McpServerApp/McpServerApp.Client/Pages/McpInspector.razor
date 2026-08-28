@@ -11,7 +11,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h1 class="h3 mb-0">C# MCP Server & Blazor Inspector</h1>
-            <p class="text-muted small mb-0">Diagnostic UI for a current, stateless MCP Streamable HTTP server and simulated tools</p>
+            <p class="text-muted small mb-0">Diagnostic UI for a current, stateless MCP Streamable HTTP server and demonstration tools</p>
         </div>
         <div class="d-flex gap-2">
             <span class="badge bg-success d-flex align-items-center">Current MCP HTTP: POST /mcp</span>
@@ -130,7 +130,7 @@
             <div class="card-body p-0">
                 @if (Logs.Count == 0)
                 {
-                    <div class="p-3 text-muted">No diagnostic calls recorded yet. Execute a tool in the inspector to see a redacted local record.</div>
+                    <div class="p-3 text-muted">No diagnostic calls recorded yet. Execute a tool in the inspector to see a local diagnostic record.</div>
                 }
                 else
                 {
@@ -175,7 +175,7 @@
             </div>
             <div class="card-body">
                 <div class="alert alert-info mb-4">
-                    <strong>Transport and diagnostic UI are separate.</strong> MCP clients send current-protocol requests to <code>POST /mcp</code>. This page calls the application-specific <code>/api/mcp</code> endpoints so the sample tools and local log can be examined in a browser.
+                    <strong>Transport and diagnostic UI are separate.</strong> MCP clients send current-protocol requests to <code>POST /mcp</code>. This page calls the application-specific <code>/api/mcp</code> endpoints so the sample tools and local diagnostic log can be examined in a browser.
                 </div>
                 <h6>1. Connect a current MCP client</h6>
                 <p class="small text-muted">Configure a current MCP client to use this server's <code>POST /mcp</code> endpoint. Client configuration is product-specific and changes independently, so use the client’s current official documentation instead of copying static settings from this demo; that includes historical snippets such as <code>claude_desktop_config.json</code>.</p>

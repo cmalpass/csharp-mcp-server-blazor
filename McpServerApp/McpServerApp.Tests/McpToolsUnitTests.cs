@@ -1,4 +1,5 @@
 using FluentAssertions;
+using ModelContextProtocol;
 using McpServerApp.Services;
 using System.Text.Json;
 using Xunit;
@@ -50,6 +51,33 @@ public class McpToolsUnitTests
     }
 
     [Fact]
+    public void CalculateCompoundInterest_InvalidOrUnboundedInputs_ThrowsSafeToolError()
+    {
+        Action invalidPrincipal = () => SampleMcpTools.CalculateCompoundInterest(0m, 5m, 1, 12);
+        Action excessivePeriods = () => SampleMcpTools.CalculateCompoundInterest(100m, 5m, 101, 365);
+
+        invalidPrincipal.Should().Throw<McpException>().WithMessage("*greater than zero*");
+        excessivePeriods.Should().Throw<McpException>().WithMessage("*at most*");
+    }
+
+    [Fact]
+    public void QueryCustomers_TotalFound_IsCountBeforePagination()
+    {
+        using var doc = JsonDocument.Parse(SampleMcpTools.QueryCustomers(region: "Europe", limit: 1));
+
+        doc.RootElement.GetProperty("totalFound").GetInt32().Should().Be(2);
+        doc.RootElement.GetProperty("customers").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public void GetWeatherForecast_RejectsUnknownUnit()
+    {
+        Action invalidUnit = () => SampleMcpTools.GetWeatherForecast("London", "kelvin");
+
+        invalidUnit.Should().Throw<McpException>().WithMessage("*celsius*fahrenheit*");
+    }
+
+    [Fact]
     public async Task McpServerRegistry_ToolDiscoveryAndExecution_WorksEndToEnd()
     {
         // Arrange
@@ -64,7 +92,7 @@ public class McpToolsUnitTests
 
         // Act 2: Execute Tool
         var args = new Dictionary<string, object?> { ["city"] = "London", ["unit"] = "celsius" };
-        var callResult = await registry.CallToolAsync("get_weather_forecast", args);
+        var callResult = await registry.CallToolAsync("get_weather_forecast", args, TestContext.Current.CancellationToken);
 
         // Assert 2
         callResult.IsError.Should().BeFalse();

@@ -32,7 +32,7 @@ public class McpCallResponse
     [JsonPropertyName("content")]
     public List<McpContentItem> Content { get; set; } = new();
 
-    public string GetTextContent() => 
+    public string GetTextContent() =>
         string.Join("\n", Content.Where(c => c.Type == "text").Select(c => c.Text));
 }
 

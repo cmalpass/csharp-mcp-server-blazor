@@ -2,10 +2,12 @@ using McpServerApp.Client.Pages;
 using McpServerApp.Components;
 using McpServerApp.Contracts;
 using McpServerApp.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Reflection;
+using System.Net;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +16,21 @@ builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<McpServerRegistry>();
+
+// Forwarded headers are honored only when an operator explicitly identifies the
+// reverse proxy. Never trust client-supplied X-Forwarded-* headers by default.
+var trustedProxyAddress = builder.Configuration["Mcp:TrustedProxyAddress"];
+var useTrustedProxy = IPAddress.TryParse(trustedProxyAddress, out var trustedProxyIp);
+if (useTrustedProxy)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        options.KnownProxies.Add(trustedProxyIp!);
+    });
+}
 
 // The official SDK owns protocol negotiation, JSON-RPC validation, error responses,
 // and transport lifecycle. Stateless mode is the forward-compatible HTTP choice.
@@ -55,6 +72,11 @@ app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/api") &&
                !context.Request.Path.StartsWithSegments("/mcp"),
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
+
+if (useTrustedProxy)
+{
+    app.UseForwardedHeaders();
+}
 
 // Local development intentionally supports the HTTP profile used by the README.
 // Production deployments should terminate TLS and redirect HTTP to HTTPS.
