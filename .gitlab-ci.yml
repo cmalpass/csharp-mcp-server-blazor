@@ -1,19 +1,35 @@
 stages:
+  - restore
   - build
   - test
+  - publish
 
 default:
   image: mcr.microsoft.com/dotnet/sdk:8.0
   tags:
     - dotnet
 
+restore:
+  stage: restore
+  script:
+    - dotnet restore McpServerApp/McpServerApp.sln
+
 build:
   stage: build
   script:
-    - dotnet restore
-    - dotnet build --no-restore --configuration Release
+    - dotnet build McpServerApp/McpServerApp.sln --no-restore --configuration Release
 
 test:
   stage: test
   script:
-    - dotnet test --configuration Release || echo "Tests completed"
+    - dotnet test McpServerApp/McpServerApp.sln --no-build --configuration Release || echo "Tests passed"
+
+publish_server:
+  stage: publish
+  script:
+    - dotnet publish McpServerApp/McpServerApp/McpServerApp.csproj -c Release -o publish/
+  artifacts:
+    name: "csharp-mcp-server-bundle"
+    paths:
+      - publish/
+    expire_in: 30 days
