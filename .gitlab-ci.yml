@@ -1,5 +1,4 @@
 stages:
-  - restore
   - build
   - test
   - publish
@@ -9,20 +8,17 @@ default:
   tags:
     - dotnet
 
-restore:
-  stage: restore
-  script:
-    - dotnet restore McpServerApp/McpServerApp.sln
-
 build:
   stage: build
   script:
-    - dotnet build McpServerApp/McpServerApp.sln --no-restore --configuration Release
+    - dotnet restore McpServerApp/McpServerApp.sln
+    - dotnet build McpServerApp/McpServerApp.sln -c Release
 
 test:
   stage: test
   script:
-    - dotnet test McpServerApp/McpServerApp.sln --no-build --configuration Release || echo "Tests passed"
+    - dotnet restore McpServerApp/McpServerApp.sln
+    - dotnet test McpServerApp/McpServerApp.sln -c Release || echo "Tests passed"
 
 publish_server:
   stage: publish
